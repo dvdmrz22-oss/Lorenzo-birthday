@@ -412,11 +412,11 @@
   <script>
     // 🎵 ADD YOUR MP3 URLS HERE
     const songs = [
-      "Happy Birthday.mp3",
-      "Knockin On Heavens Door.mp3",
-      "Paradise City.mp3",
-      "Sweet Child o Mine.mp3",
-      "Welcome To The Jungle.mp3",
+      "https://visionary-cobbler-63c7eb.netlify.app/happy birthday.mp3",
+      "https://visionary-cobbler-63c7eb.netlify.app/knockin on heavens door.mp3",
+      "https://visionary-cobbler-63c7eb.netlify.app/paradise city.mp3",
+      "https://visionary-cobbler-63c7eb.netlify.app/sweet child o mine.mp3",
+      "https://visionary-cobbler-63c7eb.netlify.app/welcome to the jungle.mp3",
     ];
 
     const audio     = document.getElementById('audio');
@@ -581,7 +581,15 @@
     }
 
     function loadAndPlay() {
-      audio.src = nextSong();
+      // iOS Safari: AudioContext MUST be created/resumed inside a direct user gesture
+      if (!audioCtx) initAudio();
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+
+      const url = nextSong();
+      // Encode URL to handle spaces and special chars in filenames
+      const parts = url.split('/');
+      const encoded = parts.map((p, i) => i === parts.length - 1 ? encodeURIComponent(p) : p).join('/');
+      audio.src = encoded;
       audio.load();
       audio.play()
         .then(() => {
@@ -589,7 +597,10 @@
           setPlaying(true);
           updateMediaSession();
         })
-        .catch(() => setPlaying(false));
+        .catch((e) => {
+          console.warn('Playback failed:', e);
+          setPlaying(false);
+        });
     }
 
     // ── Media Session API ──
@@ -621,12 +632,11 @@
     }
 
     // ── Auto-play attempt on load ──
+    // Note: iOS Safari blocks this until a user gesture — the play button handles that case
     window.addEventListener('load', () => {
-      audio.src = nextSong();
-      audio.load();
       audio.play()
         .then(() => { markHasSong(); setPlaying(true); updateMediaSession(); })
-        .catch(() => {});
+        .catch(() => { /* expected on iOS — user must tap */ });
     });
 
     // ── Button tap ──
@@ -645,7 +655,9 @@
     // ── Resume button tap ──
     const btnResume = document.getElementById('btnResume');
     btnResume.addEventListener('click', () => {
-      audio.play().then(() => setPlaying(true));
+      if (!audioCtx) initAudio();
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+      audio.play().then(() => setPlaying(true)).catch(e => console.warn('Resume failed:', e));
     });
 
     // ── Song ends → auto-advance ──
@@ -988,18 +1000,48 @@
       }
     }
 
-    // Re-acquire wake lock if page becomes visible again (e.g. user unlocks phone)
+    // ── iOS lock screen audio fix ──
+    // When screen locks, iOS suspends the AudioContext which interrupts playback.
+    // Fix: disconnect the analyser node on hide (so audio flows directly to destination)
+    // and reconnect it on show (so spectrum works again). Audio never stops.
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && !audio.paused) {
-        requestWakeLock();
-        // Resume AudioContext if iOS suspended it on lock
-        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+      if (document.visibilityState === 'hidden') {
+        // Screen locking — disconnect analyser to free the audio pipeline
+        if (source && analyser) {
+          try {
+            source.disconnect(analyser);
+            analyser.disconnect(audioCtx.destination);
+            source.connect(audioCtx.destination); // direct connection keeps audio alive
+          } catch(e) {}
+        }
+      } else {
+        // Screen unlocking — reconnect analyser and resume AudioContext
+        if (source && analyser && audioCtx) {
+          try {
+            source.disconnect(audioCtx.destination);
+            source.connect(analyser);
+            analyser.connect(audioCtx.destination);
+          } catch(e) {}
+          audioCtx.resume().then(() => {
+            // Restart spectrum drawing if song is still playing
+            if (!audio.paused && !rafId) drawSpectrum();
+          });
+        }
+        // Re-acquire wake lock
+        if (!audio.paused) requestWakeLock();
       }
     });
 
-    // iOS suspends AudioContext on lock screen — resume it as soon as possible
+    // Resume AudioContext on any play event (belt-and-suspenders)
     audio.addEventListener('play', () => {
       if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    });
+
+    // If audio gets interrupted by iOS and auto-recovers, resync UI
+    audio.addEventListener('pause', () => {
+      // Only treat as unexpected pause if we think we're playing
+      // (iOS can fire this when locking — do NOT call setPlaying here,
+      //  that would show the wrong UI state)
     });
 
   </script>
