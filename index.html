@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#0a0a0a" />
+  <title>♪</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a0a;
+      --fg: #f0ece4;
+      --accent: #c8b89a;
+      --ring: rgba(200, 184, 154, 0.15);
+      --bar-track: rgba(200, 184, 154, 0.15);
+      --bar-fill: #c8b89a;
+    }
+
+    html, body {
+      height: 100%;
+      min-height: 100dvh;
+      background: var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      /* prevent iOS overscroll bounce */
+      overscroll-behavior: none;
+      /* prevent text selection on tap-hold */
+      -webkit-user-select: none;
+      user-select: none;
+      /* prevent callout on long press */
+      -webkit-touch-callout: none;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+      background-size: 180px 180px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .scene {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2.5rem;
+      animation: fadeIn 1.2s ease both;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Ripple rings */
+    .rings {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+
+    .ring {
+      position: absolute;
+      border-radius: 50%;
+      border: 1px solid var(--ring);
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%) scale(0);
+      opacity: 0;
+    }
+
+    .ring:nth-child(1) { width: 120px; height: 120px; }
+    .ring:nth-child(2) { width: 200px; height: 200px; }
+    .ring:nth-child(3) { width: 300px; height: 300px; }
+    .ring:nth-child(4) { width: 420px; height: 420px; }
+
+    .playing .ring:nth-child(1) { animation: ripple 3s 0.0s ease-out infinite; }
+    .playing .ring:nth-child(2) { animation: ripple 3s 0.6s ease-out infinite; }
+    .playing .ring:nth-child(3) { animation: ripple 3s 1.2s ease-out infinite; }
+    .playing .ring:nth-child(4) { animation: ripple 3s 1.8s ease-out infinite; }
+
+    @keyframes ripple {
+      0%   { transform: translate(-50%, -50%) scale(0.6); opacity: 0.6; }
+      100% { transform: translate(-50%, -50%) scale(1);   opacity: 0; }
+    }
+
+    /* ── Button ── */
+    .btn {
+      position: relative;
+      border: 1px solid rgba(200, 184, 154, 0.4);
+      background: transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-tap-highlight-color: transparent;
+      outline: none;
+      overflow: hidden;
+      /* initial: circle */
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      transition: border-color 0.4s, transform 0.2s,
+                  width 0.45s cubic-bezier(.4,0,.2,1),
+                  height 0.45s cubic-bezier(.4,0,.2,1),
+                  border-radius 0.45s cubic-bezier(.4,0,.2,1);
+    }
+
+    .btn:active { transform: scale(0.94); }
+
+    /* pill shape after first play */
+    .btn.has-played {
+      width: min(72vw, 220px);
+      height: 54px;
+      border-radius: 27px;
+    }
+
+    /* icons */
+    .icon-play, .icon-pause, .icon-next {
+      position: absolute;
+      transition: opacity 0.3s, transform 0.3s;
+    }
+
+    .icon-pause { opacity: 0; transform: scale(0.8); }
+    .icon-next  { opacity: 0; transform: scale(0.8); }
+
+    /* while playing → show pause */
+    .btn.playing-state .icon-play  { opacity: 0; transform: scale(0.8); }
+    .btn.playing-state .icon-pause { opacity: 1; transform: scale(1); }
+    .btn.playing-state .icon-next  { opacity: 0; transform: scale(0.8); }
+
+    /* has-played + paused → show "Play another song" */
+    .btn.has-played:not(.playing-state) .icon-play  { opacity: 0; transform: scale(0.8); }
+    .btn.has-played:not(.playing-state) .icon-next  { opacity: 1; transform: scale(1); }
+
+    .next-label {
+      font-family: 'Cormorant Garamond', serif;
+      font-weight: 300;
+      font-size: 1.05rem;
+      letter-spacing: 0.14em;
+      color: var(--accent);
+      white-space: nowrap;
+      text-transform: uppercase;
+    }
+
+    /* Spectrum analyser */
+    .spectrum {
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 56px;
+      width: min(80vw, 280px);
+      opacity: 0;
+      transition: opacity 0.6s;
+    }
+
+    .playing .spectrum { opacity: 1; }
+
+    .spectrum canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* ── Seek bar ── */
+    .seek-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      width: min(80vw, 280px);
+      opacity: 0;
+      transform: translateY(6px);
+      transition: opacity 0.6s, transform 0.6s;
+      pointer-events: none;
+    }
+
+    .has-song .seek-wrap {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: all;
+    }
+
+    .seek-times {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .seek-times span {
+      font-family: 'Cormorant Garamond', serif;
+      font-weight: 300;
+      font-size: 1rem;
+      letter-spacing: 0.12em;
+      color: rgba(240, 236, 228, 0.5);
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 3px;
+      background: transparent;
+      cursor: pointer;
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 3px;
+      border-radius: 1px;
+      background: linear-gradient(
+        to right,
+        var(--bar-fill) 0%,
+        var(--bar-fill) var(--pct, 0%),
+        var(--bar-track) var(--pct, 0%),
+        var(--bar-track) 100%
+      );
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--accent);
+      margin-top: -10px;
+      transition: transform 0.15s;
+    }
+
+    input[type="range"]:active::-webkit-slider-thumb {
+      transform: scale(1.4);
+    }
+
+    input[type="range"]::-moz-range-track {
+      height: 2px;
+      border-radius: 1px;
+      background: var(--bar-track);
+    }
+    input[type="range"]::-moz-range-progress {
+      height: 2px;
+      background: var(--bar-fill);
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 22px; height: 22px;
+      border: none;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    /* ── Resume button ── */
+    .btn-resume {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: transparent;
+      border: 1px solid rgba(200, 184, 154, 0.25);
+      border-radius: 20px;
+      padding: 8px 20px 8px 14px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      outline: none;
+      opacity: 0;
+      transform: translateY(6px);
+      pointer-events: none;
+      transition: opacity 0.4s, transform 0.4s, border-color 0.2s;
+    }
+
+    .btn-resume:active { transform: scale(0.95); }
+    .btn-resume:hover  { border-color: rgba(200, 184, 154, 0.5); }
+
+    .resume-label {
+      font-family: 'Cormorant Garamond', serif;
+      font-weight: 300;
+      font-size: 0.95rem;
+      letter-spacing: 0.18em;
+      color: rgba(240, 236, 228, 0.45);
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    /* visible only when paused mid-song */
+    .has-song:not(.playing) .btn-resume {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: all;
+    }
+
+    /* ── Birthday text ── */
+    .birthday {
+      position: fixed;
+      top: 2.2rem;
+      left: 0; right: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.4rem;
+      z-index: 2;
+    }
+
+    .birthday-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-weight: 400;
+      font-size: clamp(1.6rem, 6vw, 2rem);
+      letter-spacing: 0.08em;
+      color: rgba(240, 236, 228, 0.85);
+    }
+
+    .birthday-date {
+      font-family: 'Cormorant Garamond', serif;
+      font-weight: 300;
+      font-style: italic;
+      font-size: 1rem;
+      letter-spacing: 0.22em;
+      color: rgba(200, 184, 154, 0.5);
+      text-transform: uppercase;
+    }
+
+    /* Tap hint */
+    .hint {
+      font-family: 'Cormorant Garamond', serif;
+      font-weight: 300;
+      font-size: 0.95rem;
+      letter-spacing: 0.25em;
+      color: rgba(240, 236, 228, 0.25);
+      text-transform: uppercase;
+      transition: opacity 0.6s;
+    }
+
+    .has-song .hint { opacity: 0; pointer-events: none; }
+
+    /* ── Rock band animation ── */
+    .band {
+      opacity: 0;
+      transition: opacity 0.6s;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+
+    .has-song .band { opacity: 1; }
+
+    .band canvas {
+      display: block;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="birthday">
+    <span class="birthday-title">Buon compleanno Broda!</span>
+    <span class="birthday-date">4 marzo 2026</span>
+  </div>
+
+  <div class="scene" id="scene">
+    <div class="rings" id="rings">
+      <div class="ring"></div>
+      <div class="ring"></div>
+      <div class="ring"></div>
+      <div class="ring"></div>
+    </div>
+
+    <button class="btn" id="btn" aria-label="Play">
+      <svg class="icon-play" width="22" height="22" viewBox="0 0 24 24">
+        <polygon points="6,3 20,12 6,21" fill="#c8b89a"/>
+      </svg>
+      <svg class="icon-pause" width="22" height="22" viewBox="0 0 24 24">
+        <rect x="5"  y="3" width="4" height="18" rx="1" fill="#c8b89a"/>
+        <rect x="15" y="3" width="4" height="18" rx="1" fill="#c8b89a"/>
+      </svg>
+      <span class="icon-next next-label">Play another song</span>
+    </button>
+
+    <button class="btn-resume" id="btnResume" aria-label="Resume">
+      <svg width="14" height="14" viewBox="0 0 24 24"><polygon points="6,3 20,12 6,21" fill="#c8b89a"/></svg>
+      <span class="resume-label">Resume</span>
+    </button>
+
+    <div class="spectrum" id="spectrum">
+      <canvas id="specCanvas"></canvas>
+    </div>
+
+    <div class="seek-wrap" id="seekWrap">
+      <input type="range" id="seeker" min="0" max="100" value="0" step="0.1" />
+      <div class="seek-times">
+        <span id="tCurrent">0:00</span>
+        <span id="tDuration">0:00</span>
+      </div>
+    </div>
+
+    <div class="band" id="band">
+      <canvas id="bandCanvas"></canvas>
+    </div>
+
+    <span class="hint">tap to play</span>
+  </div>
+
+  <audio id="audio" preload="none"></audio>
+
+  <script>
+    // 🎵 ADD YOUR MP3 URLS HERE
+    const songs = [
+      "https://visionary-cobbler-63c7eb.netlify.app/happy birthday.mp3",
+      "https://visionary-cobbler-63c7eb.netlify.app/knockin on heavens door.mp3",
+      "https://visionary-cobbler-63c7eb.netlify.app/paradise city.mp3",
+      "https://visionary-cobbler-63c7eb.netlify.app/sweet child o mine.mp3",
+      "https://visionary-cobbler-63c7eb.netlify.app/welcome to the jungle.mp3",
+    ];
+
+    const audio     = document.getElementById('audio');
+    const btn       = document.getElementById('btn');
+    const scene     = document.getElementById('scene');
+    const rings     = document.getElementById('rings');
+    const seeker    = document.getElementById('seeker');
+    const tCurrent  = document.getElementById('tCurrent');
+    const tDuration = document.getElementById('tDuration');
+    const spectrum  = document.getElementById('spectrum');
+    const canvas    = document.getElementById('specCanvas');
+    const ctx       = canvas.getContext('2d');
+
+    // ── Web Audio API spectrum analyser ──
+    let audioCtx, analyser, source, rafId;
+    const BAR_COUNT = 64;
+
+    function initAudio() {
+      if (audioCtx) return; // only once
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.8;
+      source = audioCtx.createMediaElementSource(audio);
+      source.connect(analyser);
+      analyser.connect(audioCtx.destination);
+    }
+
+    function resizeCanvas() {
+      canvas.width  = spectrum.clientWidth  * window.devicePixelRatio;
+      canvas.height = spectrum.clientHeight * window.devicePixelRatio;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+
+    function drawSpectrum() {
+      rafId = requestAnimationFrame(drawSpectrum);
+      const W = spectrum.clientWidth;
+      const H = spectrum.clientHeight;
+
+      if (canvas.width !== W * window.devicePixelRatio) resizeCanvas();
+
+      const dataArr = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(dataArr);
+
+      const vals = Array.from({length: BAR_COUNT}, (_, i) => {
+        const binIndex = Math.floor(Math.pow(i / BAR_COUNT, 1.4) * dataArr.length);
+        return dataArr[binIndex] / 255;
+      });
+      drawBars(vals, W, H);
+    }
+
+    function startSpectrum() {
+      if (!audioCtx) initAudio();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      resizeCanvas();
+      decaying = false; // cancel any decay animation
+      decayValues = null;
+      if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+      drawSpectrum();
+    }
+
+    let decaying = false;
+    let decayValues = null;
+
+    function getCanvasDims() {
+      // Always use actual canvas pixel dims divided by DPR for logical size
+      const dpr = window.devicePixelRatio || 1;
+      return {
+        W: canvas.width  / dpr,
+        H: canvas.height / dpr,
+      };
+    }
+
+    function drawBars(values, W, H) {
+      ctx.clearRect(0, 0, W, H);
+      const barW = (W - (BAR_COUNT - 1) * 1.5) / BAR_COUNT;
+      for (let i = 0; i < BAR_COUNT; i++) {
+        const v = values[i];
+        const barH = Math.max(4, v * H);
+        const x = i * (barW + 1.5);
+        const alpha = 0.35 + v * 0.65;
+        ctx.fillStyle = `rgba(200, 184, 154, ${alpha})`;
+        ctx.beginPath();
+        ctx.roundRect(x, H - barH, barW, barH, 1);
+        ctx.fill();
+      }
+    }
+
+    function drawIdleBaseline() {
+      const { W, H } = getCanvasDims();
+      const barW = (W - (BAR_COUNT - 1) * 1.5) / BAR_COUNT;
+      ctx.clearRect(0, 0, W, H);
+      for (let i = 0; i < BAR_COUNT; i++) {
+        const x = i * (barW + 1.5);
+        ctx.fillStyle = 'rgba(200, 184, 154, 0.5)';
+        ctx.beginPath();
+        ctx.roundRect(x, H - 4, barW, 4, 1);
+        ctx.fill();
+      }
+    }
+
+    function stopSpectrum() {
+      if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+      if (analyser) {
+        const data = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteFrequencyData(data);
+        decayValues = Array.from(data).map(v => v / 255);
+      } else {
+        decayValues = new Array(BAR_COUNT).fill(0);
+      }
+      decaying = true;
+      animateDecay();
+    }
+
+    function animateDecay() {
+      if (!decaying) return;
+      const { W, H } = getCanvasDims();
+      let allZero = true;
+      for (let i = 0; i < BAR_COUNT; i++) {
+        decayValues[i] = Math.max(0, decayValues[i] - 0.035);
+        if (decayValues[i] > 0.01) allZero = false;
+      }
+      drawBars(decayValues, W, H);
+      if (!allZero) {
+        requestAnimationFrame(animateDecay);
+      } else {
+        decaying = false;
+        drawIdleBaseline();
+      }
+    }
+
+    // ── Shuffle queue: exhausts all songs before repeating ──
+    let queue = [];
+    function buildQueue() {
+      queue = [...songs].sort(() => Math.random() - 0.5);
+    }
+    buildQueue();
+
+    function nextSong() {
+      if (queue.length === 0) buildQueue();
+      return queue.pop();
+    }
+
+    // ── UI state ──
+    let hasPlayed = false;
+
+    function setPlaying(active) {
+      btn.classList.toggle('playing-state', active);
+      scene.classList.toggle('playing', active);
+      rings.classList.toggle('playing', active);
+      if (active) { startSpectrum(); startBand(); } else { stopSpectrum(); stopBand(); }
+    }
+
+    function markHasSong() {
+      if (!hasPlayed) {
+        hasPlayed = true;
+        btn.classList.add('has-played');
+        scene.classList.add('has-song');
+      }
+    }
+
+    function loadAndPlay() {
+      audio.src = nextSong();
+      audio.load();
+      audio.play()
+        .then(() => {
+          markHasSong();
+          setPlaying(true);
+          updateMediaSession();
+        })
+        .catch(() => setPlaying(false));
+    }
+
+    // ── Media Session API ──
+    // Tells iOS/Android: "this is a media app — keep audio alive on lock screen"
+    function updateMediaSession() {
+      if (!('mediaSession' in navigator)) return;
+
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: 'Buon compleanno Broda! 🎂',
+        artist: '4 marzo 2026',
+        album: '♪',
+      });
+
+      navigator.mediaSession.setActionHandler('play', () => {
+        audio.play().then(() => setPlaying(true));
+      });
+      navigator.mediaSession.setActionHandler('pause', () => {
+        audio.pause();
+        setPlaying(false);
+      });
+      navigator.mediaSession.setActionHandler('nexttrack', () => {
+        loadAndPlay();
+      });
+      navigator.mediaSession.setActionHandler('previoustrack', () => {
+        // restart current song or go to previous
+        audio.currentTime = 0;
+        audio.play().then(() => setPlaying(true));
+      });
+    }
+
+    // ── Auto-play attempt on load ──
+    window.addEventListener('load', () => {
+      audio.src = nextSong();
+      audio.load();
+      audio.play()
+        .then(() => { markHasSong(); setPlaying(true); updateMediaSession(); })
+        .catch(() => {});
+    });
+
+    // ── Button tap ──
+    // • Before first play: start a song
+    // • While playing: pause (button shows ‖)
+    // • While paused after first play: load & play a NEW song
+    btn.addEventListener('click', () => {
+      if (audio.paused || audio.ended) {
+        loadAndPlay();
+      } else {
+        audio.pause();
+        setPlaying(false);
+      }
+    });
+
+    // ── Resume button tap ──
+    const btnResume = document.getElementById('btnResume');
+    btnResume.addEventListener('click', () => {
+      audio.play().then(() => setPlaying(true));
+    });
+
+    // ── Song ends → auto-advance ──
+    audio.addEventListener('ended', () => loadAndPlay());
+
+    // ── Time formatting ──
+    function fmt(s) {
+      if (!s || isNaN(s)) return '0:00';
+      return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+    }
+
+    // ── Seek bar: sync with playback ──
+    audio.addEventListener('timeupdate', () => {
+      if (!audio.duration || isSeeking) return;
+      const pct = (audio.currentTime / audio.duration) * 100;
+      seeker.value = pct;
+      seeker.style.setProperty('--pct', pct + '%');
+      tCurrent.textContent = fmt(audio.currentTime);
+    });
+
+    audio.addEventListener('loadedmetadata', () => {
+      tDuration.textContent = fmt(audio.duration);
+      seeker.value = 0;
+      seeker.style.setProperty('--pct', '0%');
+      tCurrent.textContent = '0:00';
+    });
+
+    // ── Scrubbing ──
+    let isSeeking = false;
+
+    seeker.addEventListener('mousedown',  () => { isSeeking = true; });
+    seeker.addEventListener('touchstart', () => { isSeeking = true; }, { passive: true });
+
+    seeker.addEventListener('input', () => {
+      const pct = seeker.value;
+      seeker.style.setProperty('--pct', pct + '%');
+      if (audio.duration) tCurrent.textContent = fmt((pct / 100) * audio.duration);
+    });
+
+    seeker.addEventListener('change', () => {
+      if (audio.duration) audio.currentTime = (seeker.value / 100) * audio.duration;
+      isSeeking = false;
+    });
+
+    seeker.addEventListener('mouseup',  () => { isSeeking = false; });
+    seeker.addEventListener('touchend', () => { isSeeking = false; });
+
+    // ── Pixel rock band: Slash & Axl ──
+    const bandEl     = document.getElementById('band');
+    const bandCanvas = document.getElementById('bandCanvas');
+    const bCtx       = bandCanvas.getContext('2d');
+
+    const SCALE = 4;
+    const BW    = 52;   // game-pixels wide
+    const BH    = 38;   // game-pixels tall
+    bandCanvas.width       = BW * SCALE;
+    bandCanvas.height      = BH * SCALE;
+    bandCanvas.style.width  = BW * SCALE + 'px';
+    bandCanvas.style.height = BH * SCALE + 'px';
+
+    function px(x, y, color, w=1, h=1) {
+      if (!color) return;
+      bCtx.fillStyle = color;
+      bCtx.fillRect(x*SCALE, y*SCALE, w*SCALE, h*SCALE);
+    }
+
+    // ── Palette ──
+    const P = {
+      // Shared
+      skin:      '#F0C888',
+      outline:   '#1a1008',
+      white:     '#F8F4E8',
+
+      // Slash
+      slashHat:  '#1a1008',
+      slashHair: '#1a1008',
+      slashTop:  '#2a1a08',   // dark brown open shirt
+      slashPant: '#1a1008',
+      slashBelt: '#8B6914',
+      guitarB:   '#C8A030',   // guitar body gold/brown
+      guitarN:   '#8B6020',   // neck
+      guitarS:   '#E8E0C0',   // strings highlight
+      guitarP:   '#2a2010',   // pickup
+
+      // Axl
+      axlBandana: '#CC2020',  // red bandana
+      axlHair:    '#E8C840',  // blonde
+      axlVest:    '#F0F0E8',  // white vest
+      axlNum:     '#1a1008',  // "22" text
+      axlJeans:   '#4060A0',  // blue jeans
+      axlBelt:    '#8B6914',
+      axlBoots:   '#1a1008',
+
+      // Stage
+      stage:     'rgba(200,184,154,0.2)',
+      shadow:    'rgba(200,184,154,0.1)',
+    };
+
+    let frame = 0;
+
+    // ─────────────────────────────────────────
+    // SLASH  (left side, x origin = 3)
+    // Leaning forward, playing guitar low
+    // ─────────────────────────────────────────
+    function drawSlash(t) {
+      const ox = 10;
+      const bob   = (t % 6 < 3) ? 0 : 1;           // body bob
+      const strum = (t % 4 < 2) ? 0 : 1;           // strumming hand
+      const lean  = (t % 12 < 6) ? 0 : 1;          // slight lean
+
+      const by = 26 + bob; // base Y for body
+
+      // ── Hat (tall top hat) ──
+      px(ox+2, by-13,      P.slashHat, 4, 1);   // brim
+      px(ox+3, by-17+lean, P.slashHat, 2, 4);   // tall crown
+
+      // ── Hair (curly, sticks out sides) ──
+      px(ox+1, by-12, P.slashHair, 1, 3);
+      px(ox+6, by-12, P.slashHair, 1, 3);
+      px(ox+2, by-12, P.slashHair, 4, 1);
+
+      // ── Face ──
+      px(ox+2, by-11, P.skin, 4, 3);
+      // sunglasses
+      px(ox+2, by-10, P.outline, 2, 1);
+      px(ox+5, by-10, P.outline, 1, 1);
+      // mouth open (singing along)
+      if (t % 4 < 2) px(ox+3, by-9+lean, P.outline, 2, 1);
+
+      // ── Body (open shirt, bare chest) ──
+      // Chest bare skin
+      px(ox+3, by-8, P.skin,      2, 3);
+      // Shirt sides (open)
+      px(ox+2, by-8, P.slashTop,  1, 5);
+      px(ox+5, by-8, P.slashTop,  1, 5);
+      // Belt
+      px(ox+2, by-3, P.slashBelt, 4, 1);
+      // Pants
+      px(ox+2, by-2, P.slashPant, 2, 4);
+      px(ox+4, by-2, P.slashPant, 2, 4);
+      // Boots
+      px(ox+1, by+2, P.slashPant, 2, 1);
+      px(ox+4, by+2, P.slashPant, 3, 1);
+
+      // ── Left arm (fret hand, reaching forward-left) ──
+      px(ox+1, by-7, P.skin, 1, 2);
+      px(ox,   by-6, P.skin, 1, 1);
+      px(ox-1, by-5, P.skin, 1, 1);  // fret fingers on neck
+
+      // ── Right arm (strum hand) ──
+      if (strum === 0) {
+        px(ox+6, by-6, P.skin, 1, 2);
+        px(ox+7, by-5, P.skin, 1, 1);
+      } else {
+        px(ox+6, by-5, P.skin, 1, 2);
+        px(ox+7, by-4, P.skin, 1, 1);
+      }
+
+      // ── Guitar (Les Paul style, held low) ──
+      // Neck (diagonal going up-left)
+      px(ox,   by-4, P.guitarN, 1, 1);
+      px(ox+1, by-5, P.guitarN, 1, 1);
+      px(ox+2, by-6, P.guitarN, 1, 1);
+      // Body (big, rounded)
+      px(ox+3, by-5, P.guitarB, 4, 4);
+      px(ox+2, by-4, P.guitarB, 1, 2);
+      px(ox+7, by-4, P.guitarB, 1, 2);
+      // Pickup
+      px(ox+4, by-4, P.guitarP, 2, 1);
+      // Strings highlight
+      px(ox+3, by-5, P.guitarS, 1, 3);
+    }
+
+    // ─────────────────────────────────────────
+    // AXL  (right side, x origin = 34)
+    // Standing, mic in hand, hip sway
+    // ─────────────────────────────────────────
+    function drawAxl(t) {
+      const ox = 31;
+      const bob  = (t % 4 < 2) ? 0 : 1;
+      const sway = (t % 8 < 4) ? 0 : 1;   // hip left/right
+      const mouth = (t % 3 < 2) ? 0 : 1;  // singing mouth
+      const armR  = (t % 6 < 3) ? 0 : 1;  // mic arm
+
+      const by = 26 + bob;
+
+      // ── Hair (long blonde, flowing) ──
+      px(ox+1, by-16,      P.axlHair, 5, 1);  // top
+      px(ox,   by-15,      P.axlHair, 1, 3);  // left flow
+      px(ox+6, by-15,      P.axlHair, 1, 4);  // right flow
+      px(ox+1, by-15,      P.axlHair, 5, 1);
+
+      // ── Bandana (red) ──
+      px(ox+1, by-14, P.axlBandana, 5, 2);
+
+      // ── Face ──
+      px(ox+1, by-12, P.skin, 5, 4);
+      // Eyes
+      px(ox+2, by-11, P.outline, 1, 1);
+      px(ox+5, by-11, P.outline, 1, 1);
+      // Mouth
+      if (mouth === 1) {
+        px(ox+2, by-9, P.outline, 3, 1);   // open mouth singing
+        px(ox+3, by-9, P.white,   1, 1);   // teeth
+      } else {
+        px(ox+3, by-9, P.outline, 1, 1);
+      }
+
+      // ── Vest (white sleeveless) ──
+      px(ox+1, by-8, P.axlVest, 5, 4);
+      // "22" on chest
+      px(ox+2, by-7, P.axlNum,  1, 2);
+      px(ox+2, by-7, P.axlNum,  2, 1);
+      px(ox+2, by-6, P.axlNum,  2, 1);
+      px(ox+4, by-7, P.axlNum,  1, 2);
+      px(ox+5, by-6, P.axlNum,  1, 1);
+      px(ox+4, by-6, P.axlNum,  2, 1);
+
+      // ── Belt ──
+      px(ox+1, by-4, P.axlBelt, 5, 1);
+
+      // ── Jeans (blue) ──
+      px(ox+1+sway, by-3, P.axlJeans, 2, 4);
+      px(ox+4+sway, by-3, P.axlJeans, 2, 4);
+
+      // ── Boots ──
+      px(ox+sway,   by+1, P.axlBoots, 3, 1);
+      px(ox+4+sway, by+1, P.axlBoots, 3, 1);
+
+      // ── Left arm (mic hand, raised) ──
+      if (armR === 0) {
+        px(ox,   by-7, P.skin, 1, 2);
+        px(ox-1, by-8, P.skin, 1, 1);
+        // mic
+        px(ox-2, by-9, P.outline, 1, 2);
+        px(ox-2, by-9, P.white,   1, 1);
+      } else {
+        px(ox,   by-6, P.skin, 1, 2);
+        px(ox-1, by-7, P.skin, 1, 1);
+        // mic lower
+        px(ox-2, by-8, P.outline, 1, 2);
+        px(ox-2, by-8, P.white,   1, 1);
+      }
+
+      // ── Right arm (gesturing) ──
+      px(ox+6, by-7, P.skin, 1, 2);
+      px(ox+7, armR === 0 ? by-8 : by-6, P.skin, 1, 1);
+    }
+
+    // ── Stage: spotlight gradient ──
+    function drawStage() {
+      const cw = bandCanvas.width;
+      const ch = bandCanvas.height;
+
+      // Spotlight cone: radial gradient centered on stage floor, yellowish warm light
+      const cx = cw / 2;
+      const cy = ch * 0.94;  // brightest point right at floor
+
+      // Wide elliptical spotlight using scaled gradient
+      bCtx.save();
+      bCtx.scale(1, 0.45);  // squash vertically to make ellipse
+      const grad = bCtx.createRadialGradient(cx, cy / 0.45, 0, cx, cy / 0.45, cw * 0.72);
+      grad.addColorStop(0.00, 'rgba(255, 240, 160, 0.38)');  // bright warm yellow floor
+      grad.addColorStop(0.25, 'rgba(240, 210, 100, 0.28)');
+      grad.addColorStop(0.55, 'rgba(200, 170,  60, 0.15)');
+      grad.addColorStop(0.80, 'rgba(160, 130,  30, 0.06)');
+      grad.addColorStop(1.00, 'rgba(0,   0,     0, 0.00)');
+      bCtx.fillStyle = grad;
+      bCtx.fillRect(0, 0, cw, ch / 0.45);
+      bCtx.restore();
+
+      // Stage floor line
+      bCtx.fillStyle = 'rgba(255, 230, 120, 0.25)';
+      bCtx.fillRect(0, 35 * SCALE, cw, 1 * SCALE);
+
+      // Character shadows on floor
+      bCtx.fillStyle = 'rgba(0,0,0,0.18)';
+      bCtx.beginPath();
+      bCtx.ellipse(14 * SCALE, 37 * SCALE, 6 * SCALE, 1 * SCALE, 0, 0, Math.PI * 2);
+      bCtx.fill();
+      bCtx.beginPath();
+      bCtx.ellipse(35 * SCALE, 37 * SCALE, 6 * SCALE, 1 * SCALE, 0, 0, Math.PI * 2);
+      bCtx.fill();
+    }
+
+    // ── Main draw loop ──
+    let bandRaf = null;
+    let lastBandTime = 0;
+    const BAND_FPS = 8;
+
+    function drawBand(ts) {
+      bandRaf = requestAnimationFrame(drawBand);
+      if (ts - lastBandTime < 1000 / BAND_FPS) return;
+      lastBandTime = ts;
+      bCtx.clearRect(0, 0, bandCanvas.width, bandCanvas.height);
+      drawStage();
+      drawSlash(frame);
+      drawAxl(frame);
+      frame++;
+    }
+
+    function startBand() {
+      if (bandRaf) { cancelAnimationFrame(bandRaf); bandRaf = null; }
+      bandRaf = requestAnimationFrame(drawBand);
+    }
+
+    function stopBand() {
+      if (bandRaf) { cancelAnimationFrame(bandRaf); bandRaf = null; }
+      // freeze canvas as-is — characters stay visible but frozen
+    }
+
+    audio.addEventListener('play', () => {
+      requestWakeLock();
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    });
+
+    audio.addEventListener('pause', () => {
+      releaseWakeLock();
+    });
+
+    // ── Wake Lock API (secondary safety net) ──
+    // Prevents the screen from fully sleeping and cutting audio on some Android browsers
+    let wakeLock = null;
+
+    async function requestWakeLock() {
+      if (!('wakeLock' in navigator)) return;
+      try {
+        if (wakeLock) return; // already held
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      } catch (e) {
+        // silently fail — Media Session is the main fix
+      }
+    }
+
+    async function releaseWakeLock() {
+      if (wakeLock) {
+        await wakeLock.release();
+        wakeLock = null;
+      }
+    }
+
+    // Re-acquire wake lock if page becomes visible again (e.g. user unlocks phone)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && !audio.paused) {
+        requestWakeLock();
+        // Resume AudioContext if iOS suspended it on lock
+        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+      }
+    });
+
+    // iOS suspends AudioContext on lock screen — resume it as soon as possible
+    audio.addEventListener('play', () => {
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    });
+
+  </script>
+</body>
+</html>
